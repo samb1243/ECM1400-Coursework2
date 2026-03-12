@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Othello/Reversi Web Game</title>
+    <style>
+        /*colour and size for buttons on the site  */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+
+        h1, h2 {
+            text-align: center;
+        }
+
+        .main-content {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start; 
+            padding: 20px;
+            gap: 40px; 
+        }
+
+        .board-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .board_grid {
+            
+            display: grid;
+            grid-template-columns: repeat({{game_board|length}}, 60px);
+            grid-template-rows: repeat({{game_board|length}}, 60px);
+            gap: 2px;
+            background: #004d00; 
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        
+        .cell {
+            
+            width: 60px;
+            height: 60px;
+            background: #2e8b57; 
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .cell:hover {
+            
+            background: #ff6347; 
+        } 
+
+        .piece {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+        }
+
+        
+        .dark-piece {
+            background: #2c0101; 
+        }
+        .light-piece {
+            background: #52cde6; 
+            border: 1px solid #52cde6;
+        }
+
+        
+        .sidebar {
+            width: 250px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .game-controls, .score-info, .game-log {
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        .game-controls button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s;
+        }
+
+        .save-btn { background-color: #5cb85c; color: white; }
+        .load-btn { background-color: #f0ad4e; color: white; }
+        .reset-btn { background-color: #d9534f; color: white; }
+        
+
+        .score-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+
+        .current-player {
+            text-align: center;
+            font-size: 1.2em;
+            margin-bottom: 10px;
+            padding: 5px;
+            border: 2px solid #333;
+            border-radius: 5px;
+        }
+        
+        #messageBox {
+            height: 10em; 
+            overflow-y: auto; 
+            white-space: pre-line; 
+            line-height: 1.2em;
+            font-size: 0.9em;
+        }
+        
+    </style>
+    <script>
+        //handling game interactions and updates 
+        let board = {{game_board|tojson}} || [];
+        let gameLog = [];
+
+        document.addEventListener('DOMContentLoaded', function() {
+            //loading the board and the game log to the page 
+            loadBoard();
+            loadGameLog();
+        }, false);
+        
+        //for reciving the input from the board
+        function sendMove(x, y, url) {
+            
+            fetch(url + '?x=' + x + '&y=' + y, {
+                method: 'GET',
+            })
+            .then(response => response.json())
+            .then(data => {
+                //Process the response
+                if (data['status'] === 'success') {
+                    gameLog.push(data['message'] || 'Move accepted.');
+                    gameLog.push("It's " + data['player'] + "'s turn.");
+                    board = data['board'];
+                    loadBoard();
+                    loadGameLog();
+                    updateCurrentPlayerDisplay(data['player']);
+                    updateScoresDisplay(data['board']);
+                } else if (data['status'] === 'fail') {
+                    updateMessageBox('Invalid move at (' + x + ', ' + y + '): ' + data['message']);
+                } else if (data['status'] === 'finished') {
+                    board = data['board'];
+                    loadBoard();        
+                    updateMessageBox(data['finished'].toString());
+                    alert(data['finished'].toString());
+                    updateScoresDisplay(data['board']);
+                }
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+                updateMessageBox('An error occurred during the move.');
+            });
+        }
+        
+        //function for the saving and loading of a game file 
+        function saveLoadAction(action) {
+            
+            fetch('/' + action + '_game', {
+                method: 'GET',
+            })
+            .then(response => response.json())
+            .then(data => {
+                updateMessageBox(data['message']);
+                if (data['status'] === 'success' && action === 'load') {
+                    
+                    window.location.reload(); 
+                }
+            })
+            .catch((error) => {
+                console.error('Error:', error);
+                updateMessageBox('An error occurred during ' + action + '.');
+            });
+        }
+
+        //function to loard the board pieces onto the page
+
+        function loadBoard() {
+            for (let y = 0; y < board.length; y++) {
+                for (let x = 0; x < board[y].length; x++) {
+                    let cell = document.getElementById(`cell-${x}-${y}`);
+                    cell.innerHTML = ''; 
+                    if (board[y][x] === 'Dark') {
+                        let piece = document.createElement('div');
+                        piece.className = 'piece dark-piece';
+                        cell.appendChild(piece);
+                    } else if (board[y][x] === 'Light') {
+                        let piece = document.createElement('div');
+                        piece.className = 'piece light-piece'; 
+                        cell.appendChild(piece);
+                    }
+                }
+            }
+        }
+        
+        //function for loading the game log onto the page
+        function loadGameLog() {
+            let messageBox = document.getElementById('messageBox');
+            messageBox.innerHTML = ''; 
+            gameLog.forEach(message => {
+                messageBox.innerHTML += message + '\n';
+            });
+            messageBox.scrollTop = messageBox.scrollHeight; 
+        }
+
+
+        //function for updating the game log with new messages
+        function updateMessageBox(message) {
+            
+            let messageBox = document.getElementById('messageBox');
+            messageBox.innerHTML += message + '\n';
+            messageBox.scrollTop = messageBox.scrollHeight;
+        }
+
+        //function for updating the current player message
+        function updateCurrentPlayerDisplay(player) {
+            document.getElementById('currentPlayerDisplay').innerText = player + "'s Turn";
+        }
+
+        //function for updating the scores on the page
+        function updateScoresDisplay(currentBoard) {
+            let darkCount = 0;
+            let lightCount = 0;
+            currentBoard.forEach(row => {
+                row.forEach(cell => {
+                    if (cell === 'Dark') darkCount++;
+                    else if (cell === 'Light') lightCount++;
+                });
+            });
+            document.getElementById('darkScore').innerText = darkCount;
+            document.getElementById('lightScore').innerText = lightCount;
+        }
+
+    </script>
+</head>
+<body>
+    <h1>Othello</h1>
+    
+    <div class="main-content">
+        <div class="board-section">
+            <h2 id="currentPlayerDisplay">{{ current_player }}'s Turn</h2>
+            <div class="board_grid">
+                {% for i in range(game_board|length) %}
+                    {% for j in range(game_board|length) %}
+                        <div class="cell" id="cell-{{ j }}-{{ i }}" onclick="sendMove({{ j+1 }}, {{ i+1 }}, '/move')">
+                            {% if game_board[i][j] == 'Dark' %}
+                                <div class="piece dark-piece"></div>
+                            {% elif game_board[i][j] == 'Light' %}
+                                <div class="piece light-piece"></div>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                {% endfor %}
+            </div>
+        </div>
+        
+        <div class="sidebar">
+            <div class="game-controls">
+                <h2>Controls</h2>
+                <button class="save-btn" onclick="saveLoadAction('save')"> Save Game</button>
+                <button class="load-btn" onclick="saveLoadAction('load')"> Load Game</button>
+                <button class="reset-btn" onclick="window.location.href='/reset'"> Reset Game</button>
+            </div>
+            
+            <div class="score-info">
+                <h2>Scores</h2>
+                <div class="score-row">
+                    <span>Dark Pieces:</span> 
+                    <span id="darkScore">{{ dark_score }}</span>
+                </div>
+                <div class="score-row">
+                    <span>Light Pieces:</span> 
+                    <span id="lightScore">{{ light_score }}</span>
+                </div>
+            </div>
+
+            <div class="game-log">
+                <h2>Game Log:</h2>
+                <div id="messageBox">
+                    {% for message in game_log %}
+                        {{ message }}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
